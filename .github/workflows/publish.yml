@@ -19,6 +19,8 @@ jobs:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -51,6 +53,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
