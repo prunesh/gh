@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go build -trimpath -o gh-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd
+      - name: Upload binary to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload ${{ github.ref_name }} gh-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  publish:
+    name: Publish to marketplace
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload prunesh.json to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload ${{ github.ref_name }} prunesh.json
+      - name: Get OIDC token
+        id: oidc
+        run: |
+          TOKEN=$(curl -s \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=prunesh-marketplace" \
+            | jq -r .value)
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+      - name: Publish to marketplace
+        run: |
+          curl -sf -X POST \
+            https://prunesh-marketplace-worker.prunesh-marketplace-worker.workers.dev/publish \
+            -H "Content-Type: application/json" \
+            -d '{
+              "oidc_token": "${{ steps.oidc.outputs.token }}",
+              "plugin_id": "prunesh/gh",
+              "version": "${{ github.ref_name }}",
+              "repo": "https://github.com/${{ github.repository }}"
+            }'
