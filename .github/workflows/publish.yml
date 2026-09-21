@@ -19,8 +19,6 @@ jobs:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     needs: test
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     strategy:
       matrix:
         include:
@@ -48,19 +46,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload ${{ github.ref_name }} gh-${{ matrix.goos }}-${{ matrix.goarch }}
 
-  publish:
-    name: Publish to marketplace
+  upload-manifest:
+    name: Upload manifest
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - name: Upload prunesh.json to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload ${{ github.ref_name }} prunesh.json
+
+  publish:
+    name: Publish to marketplace
+    needs: upload-manifest
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
       - name: Get OIDC token
         id: oidc
         run: |
